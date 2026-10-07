@@ -48,10 +48,31 @@ impl AppWindow {
       let mut current = focus;
       while current != 0 {
         if current == xid {
-          if focus == xid
-            && let Some(child) = self.children.first()
-          {
-            child.take_input_focus();
+          // The bare parent holds the keyboard focus: delegate it to a browser
+          // child. With more than one child (e.g. a chrome webview plus an
+          // embedded content pane), pick the child under the pointer so clicking
+          // the page focuses the page and clicking the chrome focuses the chrome.
+          // Fall back to the first child when the pointer is over none of them.
+          if focus == xid {
+            let under = {
+              let mut root: x11_dl::xlib::Window = 0;
+              let mut child_win: x11_dl::xlib::Window = 0;
+              let (mut rx, mut ry, mut wx, mut wy): (c_int, c_int, c_int, c_int) = (0, 0, 0, 0);
+              let mut mask: c_uint = 0;
+              if (xlib.XQueryPointer)(
+                display, xid, &mut root, &mut child_win, &mut rx, &mut ry, &mut wx, &mut wy,
+                &mut mask,
+              ) != 0
+                && child_win != 0
+              {
+                self.children.iter().find(|c| c.xid() == child_win)
+              } else {
+                None
+              }
+            };
+            if let Some(child) = under.or_else(|| self.children.first()) {
+              child.take_input_focus();
+            }
           }
           return true;
         }
