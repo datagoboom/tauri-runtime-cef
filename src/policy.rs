@@ -770,6 +770,34 @@ pub(crate) fn popup_allowed(request: &PopupRequest<'_>) -> Option<bool> {
   POPUP_POLICY.get().map(|policy| policy(request))
 }
 
+/// A browser keyboard shortcut (Ctrl/Cmd/Alt + key) the embedding app may handle.
+/// `key_code` is the Windows virtual key code CEF reports in `windows_key_code`.
+#[derive(Debug, Clone, Copy)]
+pub struct ShortcutEvent {
+  /// Windows virtual key code (e.g. 84 = T, 87 = W, 82 = R, 9 = Tab, 37/39 = arrows).
+  pub key_code: i32,
+  /// Ctrl on Linux/Windows, Cmd on macOS.
+  pub primary: bool,
+  pub alt: bool,
+  pub shift: bool,
+}
+
+type ShortcutHandler = dyn Fn(&ShortcutEvent) -> bool + Send + Sync;
+
+static SHORTCUT_HANDLER: OnceLock<Box<ShortcutHandler>> = OnceLock::new();
+
+/// Sets the process-global browser-shortcut handler. Return `true` to consume the
+/// shortcut (the page does not receive it and CEF applies no default); `false` to
+/// let it fall through. Lets the app wire Ctrl+T/W/L/R, Ctrl+Tab, Alt+←/→, etc. to
+/// its own tab model even while a web page has keyboard focus.
+pub fn set_shortcut_handler(handler: impl Fn(&ShortcutEvent) -> bool + Send + Sync + 'static) {
+  let _ = SHORTCUT_HANDLER.set(Box::new(handler));
+}
+
+pub(crate) fn handle_shortcut(event: &ShortcutEvent) -> bool {
+  SHORTCUT_HANDLER.get().map(|h| h(event)).unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

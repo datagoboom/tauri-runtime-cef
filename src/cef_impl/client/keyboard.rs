@@ -57,7 +57,6 @@ wrap_keyboard_handler! {
       #[cfg(target_os = "macos")]
       let primary_modifier = (modifiers & (cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0)) != 0;
       let alt = (modifiers & (cef_event_flags_t::EVENTFLAG_ALT_DOWN.0)) != 0;
-      #[cfg(not(target_os = "macos"))]
       let shift = (modifiers & (cef_event_flags_t::EVENTFLAG_SHIFT_DOWN.0)) != 0;
 
       let key_code = event.windows_key_code;
@@ -65,6 +64,12 @@ wrap_keyboard_handler! {
       if is_browser_shortcut(key_code, primary_modifier, alt) {
         if let Some(is_keyboard_shortcut) = is_keyboard_shortcut {
           *is_keyboard_shortcut = 1;
+        }
+        // Offer the shortcut to the app (it owns the tab model). If it handles it,
+        // consume the event so the page and CEF's default both ignore it.
+        let ev = crate::policy::ShortcutEvent { key_code, primary: primary_modifier, alt, shift };
+        if crate::policy::handle_shortcut(&ev) {
+          return 1;
         }
         return 0;
       }
